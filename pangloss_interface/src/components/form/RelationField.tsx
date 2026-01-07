@@ -11,43 +11,54 @@ import {
   SemanticSpaceTypes,
 } from "../../../.model-configs/model-typescript";
 import { RelationToExistingField } from "./RelationToExistingField";
-import { BiRegularCopy, BiRegularCut, BiRegularPlus } from "solid-icons/bi";
+import {
+  BiRegularCopy,
+  BiRegularCut,
+  BiRegularPaste,
+  BiRegularPlus,
+} from "solid-icons/bi";
 import { IoCloseSharp } from "solid-icons/io";
 import { For, JSXElement, Match, Show, Switch } from "solid-js";
 import { FormFields, getOrderFields } from "~/components/form/BaseForm";
 import { TranslationKey, useTranslation } from "~/contexts/translation";
 import { createBlankObject } from "~/utils/createBlankObject";
 import { scratchboard } from "./Scratchboard";
+import { content } from "../../../tailwind.config.cjs";
 
 const InlineFormColours = {
   slate: {
-    bar: "bg-slate-600 shadow-slate-600/40",
+    bar: "bg-slate-600",
     container: "bg-slate-600/10 border-slate-400/20",
     hover: "hover:bg-slate-700/80",
+    paste: "bg-slate-600/60 shadow-slate-600/40",
   },
   zinc: {
     bar: "bg-zinc-600 shadow-zinc-600/40",
     container: "bg-zinc-600/10 border-zinc-400/20",
     hover: "hover:bg-zinc-700/80",
+    paste: "bg-zinc-600/60",
   },
   red: {
     bar: "bg-red-600/90 shadow-red-600/40",
     container: "bg-red-600/10 border-red-400/20 ",
     hover: "hover:bg-red-700/80",
+    paste: "bg-red-600/60",
   },
   amber: {
     bar: "bg-amber-600 shadow-amber-600/40",
     container: "bg-amber-600/10 border-amber-400/20",
     hover: "hover:bg-amber-700/80",
+    paste: "bg-amber-600/60",
   },
   green: {
     bar: "bg-green-600 shadow-green-600/40",
     container: "bg-green-600/10 border-green-400/20",
     hover: "hover:bg-green-700/80",
+    paste: "bg-green-600/60",
   },
 };
 
-function getColour(modelType: keyof typeof ModelDefinitions) {
+export function getColour(modelType: keyof typeof ModelDefinitions) {
   const modelColour =
     InlineFormColours[
       ModelDefinitions[modelType].meta?.colour as keyof typeof InlineFormColours
@@ -311,6 +322,11 @@ function RelationFieldTypeSelectorWrapper(props: {
   );
 }
 
+type TRecursiveSubtypeHierarchyProps<T extends BaseNodeTypes> = {
+  subtypeHierarchy: TSubtypeHierarchy<T>;
+  n: number;
+};
+
 type TRelationFieldTypeSelectorProps = {
   fieldOnModel?: keyof typeof ModelDefinitions;
   onSelectType: (newModel: object) => void;
@@ -361,7 +377,11 @@ function RelationFieldTypeSelector(props: TRelationFieldTypeSelectorProps) {
     (t) => t.metatype === "RelationToSemanticSpace",
   );
 
-  const ss = semanticSpaceTypes.flatMap((t) => t.types);
+  const semanticSpaceTypeModels = semanticSpaceTypes.flatMap((t) => t.types);
+
+  const allowedSemanticSpaceTypes = semanticSpaceTypeModels.map(
+    (t) => t.baseType,
+  );
 
   const selectBaseNodeType = (baseNodeType: BaseNodeTypes) => {
     props.onSelectType(createBlankObject(baseNodeType, false));
@@ -376,15 +396,14 @@ function RelationFieldTypeSelector(props: TRelationFieldTypeSelectorProps) {
     props.onSelectType(semanticSpaceModel);
   };
 
-  type TRecursiveSubtypeHierarchyProps<T extends BaseNodeTypes> = {
-    subtypeHierarchy: TSubtypeHierarchy<T>;
-    n: number;
-  };
-
   function shouldDisable(type: BaseNodeTypes) {
     return (
       !baseNodeTypes.includes(type) || BaseNodeDefinitionMap[type].meta.abstract
     );
+  }
+
+  function onPaste(item: object) {
+    props.onSelectType(item);
   }
 
   function RecurseSubtypeHierarchy<T extends BaseNodeTypes>(
@@ -434,47 +453,140 @@ function RelationFieldTypeSelector(props: TRelationFieldTypeSelectorProps) {
   return (
     <>
       <Show when={topLevelBaseNodeTypes.length > 0}>
-        <div
-          class="flex h-fit w-full gap-x-6"
-          classList={{
-            "p-10":
-              props.fieldDefinitionTypes[0].metatype !== "RelationToTypeVar",
-            "pt-10 px-10 pb-4":
-              props.fieldDefinitionTypes[0].metatype === "RelationToTypeVar",
-          }}
-        >
-          <For each={topLevelBaseNodeTypes}>
-            {(topLevelType, index) => (
-              <div class="flex flex-col">
-                <button
-                  class="group box-content flex cursor-pointer justify-start rounded-t-xs rounded-bl-xs bg-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 uppercase select-none not-last:border-b-[0.5px] not-last:border-slate-400 hover:bg-slate-700 active:bg-slate-600 active:shadow-inner active:shadow-slate-700 disabled:cursor-auto disabled:bg-slate-600/70 disabled:text-slate-100/70 disabled:hover:bg-slate-600/70 disabled:active:shadow-none"
-                  onClick={() => selectBaseNodeType(topLevelType)}
-                  disabled={shouldDisable(topLevelType)}
-                >
-                  <div
-                    classList={{
-                      "group-active:scale-[98%] group-hover:scale-[101%]":
-                        !shouldDisable(topLevelType),
-                    }}
-                  >
-                    {
-                      t[topLevelType as TranslationKey]._model
-                        .verboseName as unknown as string
-                    }
-                  </div>
-                </button>
-                <RecurseSubtypeHierarchy
-                  subtypeHierarchy={
-                    ModelDefinitions[topLevelType].meta.subtypeHierarchy
-                  }
-                  n={0}
-                />
+        <>
+          <Show
+            when={
+              scratchboard.items().length > 0 &&
+              scratchboard
+                .items()
+                .some(
+                  (item) =>
+                    item.type &&
+                    (baseNodeTypes.includes(item.type) ||
+                      allowedSemanticSpaceTypes.includes(item.type)),
+                )
+            }
+          >
+            <div class="w-full px-10">
+              <div class="border-b border-b-zinc-400/40 pt-8 pb-8">
+                <For each={scratchboard.items()}>
+                  {(item) => (
+                    <>
+                      <Show when={baseNodeTypes.includes(item.type)}>
+                        <div class="mb-2 flex overflow-clip rounded-xs not-last:mb-4">
+                          <div class="flex">
+                            <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                              <div class="flex items-center bg-slate-600/60 px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none">
+                                {t[
+                                  item.type as TranslationKey
+                                ]._model.verboseName()}
+                              </div>
+
+                              <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-sm text-black/60 select-none">
+                                {item.label || <i>No label</i>}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            class="group flex aspect-square h-10 cursor-pointer items-center justify-center rounded-r-xs bg-green-500/80 hover:bg-green-500/90 active:bg-green-500/80 active:shadow-inner active:shadow-slate-600/30"
+                            onclick={() => onPaste(item)}
+                          >
+                            <BiRegularPaste color="white" size={14} />
+                          </button>
+                        </div>
+                      </Show>
+                      <Show
+                        when={allowedSemanticSpaceTypes.includes(item.type)}
+                      >
+                        <div class="mb-2 flex overflow-clip rounded-xs not-last:mb-4">
+                          <div class="flex">
+                            <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                              <div
+                                class={
+                                  "flex items-center px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none " +
+                                  getColour(item.type).paste
+                                }
+                              >
+                                {t[
+                                  item.type as TranslationKey
+                                ]._model.verboseName()}
+                              </div>
+
+                              <div class="flex w-fit flex-nowrap items-center pr-1 pl-1 text-sm text-black/60 select-none">
+                                <For each={item.contents}>
+                                  {(contentItem) => (
+                                    <div class="flex w-fit flex-row rounded-xs bg-zinc-300/60 shadow-2xl">
+                                      <div class="flex items-center rounded-l-xs bg-slate-600/60 px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none">
+                                        {t[
+                                          contentItem.type as TranslationKey
+                                        ]._model.verboseName()}
+                                      </div>
+
+                                      <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-sm text-black/60 select-none">
+                                        {contentItem.label || <i>No label</i>}
+                                      </div>
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            class="group flex aspect-square h-10 cursor-pointer items-center justify-center rounded-r-xs bg-green-500/80 hover:bg-green-500/90 active:bg-green-500/80 active:shadow-inner active:shadow-slate-600/30"
+                            onclick={() => onPaste(item)}
+                          >
+                            <BiRegularPaste color="white" size={14} />
+                          </button>
+                        </div>
+                      </Show>
+                    </>
+                  )}
+                </For>
               </div>
-            )}
-          </For>
-        </div>
+            </div>
+          </Show>
+          <div
+            class="flex h-fit w-full gap-x-6"
+            classList={{
+              "p-10":
+                props.fieldDefinitionTypes[0].metatype !== "RelationToTypeVar",
+              "pt-10 px-10 pb-4":
+                props.fieldDefinitionTypes[0].metatype === "RelationToTypeVar",
+            }}
+          >
+            <For each={topLevelBaseNodeTypes}>
+              {(topLevelType, index) => (
+                <div class="flex flex-col">
+                  <button
+                    class="group box-content flex cursor-pointer justify-start rounded-t-xs rounded-bl-xs bg-slate-600 px-3 py-2 text-xs font-semibold text-slate-200 uppercase select-none not-last:border-b-[0.5px] not-last:border-slate-400 hover:bg-slate-700 active:bg-slate-600 active:shadow-inner active:shadow-slate-700 disabled:cursor-auto disabled:bg-slate-600/70 disabled:text-slate-100/70 disabled:hover:bg-slate-600/70 disabled:active:shadow-none"
+                    onClick={() => selectBaseNodeType(topLevelType)}
+                    disabled={shouldDisable(topLevelType)}
+                  >
+                    <div
+                      classList={{
+                        "group-active:scale-[98%] group-hover:scale-[101%]":
+                          !shouldDisable(topLevelType),
+                      }}
+                    >
+                      {
+                        t[topLevelType as TranslationKey]._model
+                          .verboseName as unknown as string
+                      }
+                    </div>
+                  </button>
+                  <RecurseSubtypeHierarchy
+                    subtypeHierarchy={
+                      ModelDefinitions[topLevelType].meta.subtypeHierarchy
+                    }
+                    n={0}
+                  />
+                </div>
+              )}
+            </For>
+          </div>
+        </>
       </Show>
-      <For each={ss}>
+      <For each={semanticSpaceTypeModels}>
         {(semanticSpaceType) => (
           <div class="mt-10 flex h-fit w-full gap-x-6">
             <div
@@ -491,7 +603,6 @@ function RelationFieldTypeSelector(props: TRelationFieldTypeSelectorProps) {
               >
                 {t[semanticSpaceType.baseType]._model.verboseName()}
               </div>
-
               <RelationFieldTypeSelector
                 fieldDefinitionTypes={
                   semanticSpaceType.typeParamsToTypeMap[

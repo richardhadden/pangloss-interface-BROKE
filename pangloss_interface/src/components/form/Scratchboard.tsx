@@ -1,4 +1,12 @@
-import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  For,
+  Match,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js";
 import { unwrap } from "solid-js/store";
 import { useClipboard, useStorage } from "solidjs-use";
 import { IoClipboard, IoCloseSharp } from "solid-icons/io";
@@ -10,8 +18,11 @@ import {
   BaseNodeDefinitionMap,
   ModelDefinitions,
   ReifiedRelationsDefinitionMap,
+  SemanticSpaceDefinitionMap,
 } from "../../../.model-configs/model-definitions";
 import { deepEqual } from "~/utils/deepEquals";
+
+import { getColour } from "./RelationField";
 
 const LOCALSTORAGE_KEY = "Pangloss";
 
@@ -92,44 +103,46 @@ function generateLabelForReifiedRelation(item) {
           </div>
         )}
       </For>
-      <For
-        each={Object.entries(
-          ModelDefinitions[item.type as keyof typeof ModelDefinitions].fields,
-        )}
-      >
-        {([fieldName, field]) => (
-          <>
-            <Show
-              when={
-                fieldName !== "target" && field.metatype === "RelationField"
-              }
-            >
-              <div class="ml-4 flex items-center px-2">
-                <span class="mr-2 text-[10px] font-semibold text-slate-600/70 uppercase">
-                  {fieldName}
-                </span>
-                <For each={item[fieldName]}>
-                  {(f) => generateLabelForReifiedRelation(f)}
-                </For>
-              </div>
-            </Show>
-            <Show
-              when={
-                fieldName !== "target" &&
-                field.metatype === "LiteralField" &&
-                item[fieldName]
-              }
-            >
-              <div class="align-center flex w-fit flex-nowrap items-center pr-4 pl-4 text-[10px] font-semibold text-slate-600/70 uppercase">
-                {t[item.type as TranslationKey][fieldName].verboseName}
-              </div>
-              <div class="flex items-center rounded-sm bg-zinc-400/30 p-2">
-                {item[fieldName].toString()}
-              </div>
-            </Show>
-          </>
-        )}
-      </For>
+      <Show when={item.type}>
+        <For
+          each={Object.entries(
+            ModelDefinitions[item.type as keyof typeof ModelDefinitions].fields,
+          )}
+        >
+          {([fieldName, field]) => (
+            <>
+              <Show
+                when={
+                  fieldName !== "target" && field.metatype === "RelationField"
+                }
+              >
+                <div class="ml-4 flex items-center px-2">
+                  <span class="mr-2 text-[10px] font-semibold text-slate-600/70 uppercase">
+                    {fieldName}
+                  </span>
+                  <For each={item[fieldName]}>
+                    {(f) => generateLabelForReifiedRelation(f)}
+                  </For>
+                </div>
+              </Show>
+              <Show
+                when={
+                  fieldName !== "target" &&
+                  field.metatype === "LiteralField" &&
+                  item[fieldName]
+                }
+              >
+                <div class="align-center flex w-fit flex-nowrap items-center pr-4 pl-4 text-[10px] font-semibold text-slate-600/70 uppercase">
+                  {t[item.type as TranslationKey][fieldName].verboseName}
+                </div>
+                <div class="flex items-center rounded-sm bg-zinc-400/30 p-2">
+                  {item[fieldName].toString()}
+                </div>
+              </Show>
+            </>
+          )}
+        </For>
+      </Show>
     </div>
   );
 }
@@ -138,7 +151,10 @@ function trimLabel(label: string) {
   if (label.length > 15) {
     return `${label.substring(0, 15)}...`;
   }
-  return label;
+  if (label.length > 0) {
+    return label;
+  }
+  return <i>No label</i>;
 }
 
 export const ScratchboardView = () => {
@@ -169,35 +185,67 @@ export const ScratchboardView = () => {
             <div class="flex p-3">
               <For each={scratchboard.items()}>
                 {(item, index) => (
-                  <div class="flex-start ml-2 flex h-fit w-fit rounded-xs bg-zinc-300/80 shadow-sm shadow-slate-500/70">
-                    <div class="flex items-center rounded-l-xs bg-slate-600/80 px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none">
-                      {t[item.type as TranslationKey]._model.verboseName()}
-                    </div>
-
-                    <Show
-                      when={item.type in BaseNodeDefinitionMap}
-                      fallback={
-                        <div class="flex w-fit flex-nowrap items-center pr-1 pl-2 text-xs">
-                          {generateLabelForReifiedRelation(item)}
+                  <Switch
+                    fallback={
+                      <div class="flex-start ml-2 flex h-fit w-fit rounded-xs bg-zinc-300/80 shadow-sm shadow-slate-500/70">
+                        <div class="flex items-center rounded-l-xs bg-slate-600/80 px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none">
+                          {t[item.type as TranslationKey]._model.verboseName()}
                         </div>
-                      }
-                    >
-                      <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs">
-                        {trimLabel(item.label)}
-                      </div>
-                    </Show>
 
-                    <button
-                      onclick={() => scratchboard.remove(index())}
-                      class="group flex aspect-square h-8 cursor-pointer items-center justify-center rounded-r-xs bg-orange-500/70 hover:bg-orange-500/80 active:bg-orange-500/80 active:shadow-inner active:shadow-slate-600/30"
-                    >
-                      <IoCloseSharp
-                        color={colors.slate["100"]}
-                        class="group-active:scale-95"
-                        size={18}
-                      />
-                    </button>
-                  </div>
+                        <Show
+                          when={item.type in BaseNodeDefinitionMap}
+                          fallback={
+                            <div class="flex w-fit flex-nowrap items-center pr-1 pl-2 text-xs">
+                              {generateLabelForReifiedRelation(item)}
+                            </div>
+                          }
+                        >
+                          <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs">
+                            {trimLabel(item.label)}
+                          </div>
+                        </Show>
+
+                        <button
+                          onclick={() => scratchboard.remove(index())}
+                          class="group flex aspect-square h-8 cursor-pointer items-center justify-center rounded-r-xs bg-orange-500/70 hover:bg-orange-500/80 active:bg-orange-500/80 active:shadow-inner active:shadow-slate-600/30"
+                        >
+                          <IoCloseSharp
+                            color={colors.slate["100"]}
+                            class="group-active:scale-95"
+                            size={18}
+                          />
+                        </button>
+                      </div>
+                    }
+                  >
+                    <Match when={item.type in SemanticSpaceDefinitionMap}>
+                      <div class="flex-start ml-2 flex h-fit w-fit rounded-xs bg-zinc-300/80 shadow-sm shadow-slate-500/70">
+                        <div
+                          class={
+                            "flex items-center rounded-l-xs px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none " +
+                            getColour(item.type).paste
+                          }
+                        >
+                          {t[item.type as TranslationKey]._model.verboseName()}
+                        </div>
+
+                        <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs">
+                          Negative
+                        </div>
+
+                        <button
+                          onclick={() => scratchboard.remove(index())}
+                          class="group flex aspect-square h-8 cursor-pointer items-center justify-center rounded-r-xs bg-orange-500/70 hover:bg-orange-500/80 active:bg-orange-500/80 active:shadow-inner active:shadow-slate-600/30"
+                        >
+                          <IoCloseSharp
+                            color={colors.slate["100"]}
+                            class="group-active:scale-95"
+                            size={18}
+                          />
+                        </button>
+                      </div>
+                    </Match>
+                  </Switch>
                 )}
               </For>
             </div>
