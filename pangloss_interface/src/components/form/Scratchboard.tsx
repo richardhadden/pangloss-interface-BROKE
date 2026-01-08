@@ -154,7 +154,7 @@ function trimLabel(label: string) {
   if (label.length > 0) {
     return label;
   }
-  return <i>No label</i>;
+  return <i>...</i>;
 }
 
 export const ScratchboardView = () => {
@@ -229,8 +229,22 @@ export const ScratchboardView = () => {
                           {t[item.type as TranslationKey]._model.verboseName()}
                         </div>
 
-                        <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs">
-                          Negative
+                        <div class="flex w-fit flex-nowrap items-center pr-1 pl-1 text-sm text-black/60 select-none">
+                          <For each={item.contents}>
+                            {(contentItem) => (
+                              <div class="flex w-fit flex-row rounded-xs bg-zinc-300/60 shadow-2xl">
+                                <div class="flex items-center rounded-l-xs bg-slate-600/60 px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none">
+                                  {t[
+                                    contentItem.type as TranslationKey
+                                  ]._model.verboseName()}
+                                </div>
+
+                                <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs text-black/60 select-none">
+                                  {contentItem.label || <i>...</i>}
+                                </div>
+                              </div>
+                            )}
+                          </For>
                         </div>
 
                         <button

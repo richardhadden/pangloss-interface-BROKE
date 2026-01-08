@@ -18,7 +18,7 @@ import {
   BiRegularPlus,
 } from "solid-icons/bi";
 import { IoCloseSharp } from "solid-icons/io";
-import { For, JSXElement, Match, Show, Switch } from "solid-js";
+import { createEffect, For, JSXElement, Match, Show, Switch } from "solid-js";
 import { FormFields, getOrderFields } from "~/components/form/BaseForm";
 import { TranslationKey, useTranslation } from "~/contexts/translation";
 import { createBlankObject } from "~/utils/createBlankObject";
@@ -167,6 +167,58 @@ function RelationField(props: TRelationFieldProps) {
 
   const modelColour = getColour(props.fieldDefinition?.fieldOnModel);
 
+  const allowedPasteTypes = props.fieldDefinition.types.map((t) => {
+    if (t.metatype === "RelationToNode") return t.type;
+    else if (t.metatype === "RelationToSemanticSpace") return t.baseType;
+  });
+
+  const allowedPasteBaseNodeTypes = props.fieldDefinition.types
+    .filter((t) => t.metatype === "RelationToNode")
+    .map((t) => t.type);
+
+  const allowedPasteSemanticSpaceTypeDefinitions =
+    props.fieldDefinition.types.filter(
+      (t) => t.metatype === "RelationToSemanticSpace",
+    );
+  const allowedSemanticSpaceTypes =
+    allowedPasteSemanticSpaceTypeDefinitions.map((t) => t.baseType);
+
+  const pasteableItemsFromScratchboard = () =>
+    scratchboard.items().filter((scratchboardItem) => {
+      if (allowedPasteBaseNodeTypes.includes(scratchboardItem.type)) {
+        return true;
+      } else if (allowedSemanticSpaceTypes.includes(scratchboardItem.type)) {
+        const semanticSpaceTypeDefinition =
+          allowedPasteSemanticSpaceTypeDefinitions.filter(
+            (t) => t.baseType === scratchboardItem.type,
+          )[0];
+
+        const allowedSemanticSpaceNestedTypes =
+          semanticSpaceTypeDefinition.types.flatMap((types) =>
+            types.typeParamsToTypeMap[
+              Object.keys(types.typeParamsToTypeMap)[0]
+            ].types
+              .filter((t) => t.metatype === "RelationToNode")
+              .map((t) => t.type),
+          );
+
+        if (
+          scratchboardItem.contents.every((contentItem) =>
+            allowedSemanticSpaceNestedTypes.includes(contentItem.type),
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+  createEffect(() => console.log(pasteableItemsFromScratchboard()));
+
+  function onPasteItem(itemToPaste) {
+    props.setValue([...props.value, itemToPaste]);
+  }
+
   return (
     <>
       <Switch fallback={<div>Field type missing</div>}>
@@ -226,26 +278,114 @@ function RelationField(props: TRelationFieldProps) {
             )}
           </For>
           <Show when={props.value.every((o) => o.type)}>
-            <button
-              class={
-                "group col-span-10 mt-6 flex h-8 w-full cursor-pointer items-center justify-start rounded-xs shadow-sm " +
-                modelColour.bar +
-                " " +
-                modelColour.hover
-              }
-              onClick={() => props.setValue([...props.value, {}])}
-            >
-              <div class="flex aspect-square h-8 items-center justify-center rounded-l-xs bg-slate-800/40 shadow-sm">
-                <BiRegularPlus
-                  color="white"
-                  size="16"
-                  class="inline group-active:scale-80"
-                />{" "}
-              </div>
-              <span class="ml-4 text-xs font-semibold text-slate-100 uppercase group-active:scale-95">
-                Add New
-              </span>
-            </button>
+            <>
+              <button
+                class={
+                  "group col-span-10 mt-6 flex h-8 w-full cursor-pointer items-center justify-start rounded-xs shadow-sm " +
+                  modelColour.bar +
+                  " " +
+                  modelColour.hover
+                }
+                onClick={() => props.setValue([...props.value, {}])}
+              >
+                <div class="flex aspect-square h-8 items-center justify-center rounded-l-xs bg-slate-800/40 shadow-sm">
+                  <BiRegularPlus
+                    color="white"
+                    size="16"
+                    class="inline group-active:scale-80"
+                  />{" "}
+                </div>
+                <span class="ml-4 text-xs font-semibold text-slate-100 uppercase group-active:scale-95">
+                  Add New
+                </span>
+              </button>
+              <Show when={pasteableItemsFromScratchboard().length > 0}>
+                <div class="col-span-12">
+                  <For each={pasteableItemsFromScratchboard()}>
+                    {(scratchboardItem) => (
+                      <Show
+                        when={allowedPasteTypes.includes(scratchboardItem.type)}
+                      >
+                        <Switch>
+                          <Match
+                            when={
+                              scratchboardItem.type in
+                              SemanticSpaceDefinitionMap
+                            }
+                          >
+                            <div class="mb-2 flex w-fit overflow-clip rounded-xs not-last:mb-4 first:mt-4">
+                              <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                                <div
+                                  class={
+                                    "flex items-center px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none " +
+                                    getColour(scratchboardItem.type).paste
+                                  }
+                                >
+                                  {t[
+                                    scratchboardItem.type as TranslationKey
+                                  ]._model.verboseName()}
+                                </div>
+
+                                <div class="flex w-fit flex-nowrap items-center pr-1 pl-1 text-sm text-black/60 select-none">
+                                  <For each={scratchboardItem.contents}>
+                                    {(contentItem) => (
+                                      <div class="flex w-fit flex-row rounded-xs bg-zinc-300/60 shadow-2xl">
+                                        <div class="flex items-center rounded-l-xs bg-slate-600/60 px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none">
+                                          {t[
+                                            contentItem.type as TranslationKey
+                                          ]._model.verboseName()}
+                                        </div>
+
+                                        <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs text-black/60 select-none">
+                                          {contentItem.label || <i>...</i>}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              </div>
+                              <button
+                                onclick={() => onPasteItem(scratchboardItem)}
+                                class="group flex aspect-square h-10 cursor-pointer items-center justify-center rounded-r-xs bg-green-500/80 hover:bg-green-500/90 active:bg-green-500/80 active:shadow-inner active:shadow-slate-600/30"
+                              >
+                                <BiRegularPaste color="white" size={14} />
+                              </button>
+                            </div>
+                          </Match>
+                          <Match
+                            when={
+                              scratchboardItem.type in BaseNodeDefinitionMap
+                            }
+                          >
+                            <div class="mb-2 flex overflow-clip rounded-xs not-last:mb-4">
+                              <div class="flex">
+                                <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                                  <div class="flex items-center bg-slate-600/60 px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none">
+                                    {t[
+                                      scratchboardItem.type as TranslationKey
+                                    ]._model.verboseName()}
+                                  </div>
+
+                                  <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-sm text-black/60 select-none">
+                                    {scratchboardItem.label || <i>...</i>}
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onclick={() => onPasteItem(scratchboardItem)}
+                                class="group flex aspect-square h-10 cursor-pointer items-center justify-center rounded-r-xs bg-green-500/80 hover:bg-green-500/90 active:bg-green-500/80 active:shadow-inner active:shadow-slate-600/30"
+                              >
+                                <BiRegularPaste color="white" size={14} />
+                              </button>
+                            </div>
+                          </Match>
+                        </Switch>
+                      </Show>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </>
           </Show>
         </Match>
         <Match when={props.value && !props.fieldDefinition.createInline}>
@@ -483,7 +623,7 @@ function RelationFieldTypeSelector(props: TRelationFieldTypeSelectorProps) {
                               </div>
 
                               <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-sm text-black/60 select-none">
-                                {item.label || <i>No label</i>}
+                                {item.label || <i>...</i>}
                               </div>
                             </div>
                           </div>
@@ -499,36 +639,34 @@ function RelationFieldTypeSelector(props: TRelationFieldTypeSelectorProps) {
                         when={allowedSemanticSpaceTypes.includes(item.type)}
                       >
                         <div class="mb-2 flex overflow-clip rounded-xs not-last:mb-4">
-                          <div class="flex">
-                            <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
-                              <div
-                                class={
-                                  "flex items-center px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none " +
-                                  getColour(item.type).paste
-                                }
-                              >
-                                {t[
-                                  item.type as TranslationKey
-                                ]._model.verboseName()}
-                              </div>
+                          <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                            <div
+                              class={
+                                "flex items-center px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none " +
+                                getColour(item.type).paste
+                              }
+                            >
+                              {t[
+                                item.type as TranslationKey
+                              ]._model.verboseName()}
+                            </div>
 
-                              <div class="flex w-fit flex-nowrap items-center pr-1 pl-1 text-sm text-black/60 select-none">
-                                <For each={item.contents}>
-                                  {(contentItem) => (
-                                    <div class="flex w-fit flex-row rounded-xs bg-zinc-300/60 shadow-2xl">
-                                      <div class="flex items-center rounded-l-xs bg-slate-600/60 px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none">
-                                        {t[
-                                          contentItem.type as TranslationKey
-                                        ]._model.verboseName()}
-                                      </div>
-
-                                      <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-sm text-black/60 select-none">
-                                        {contentItem.label || <i>No label</i>}
-                                      </div>
+                            <div class="flex w-fit flex-nowrap items-center pr-1 pl-1 text-sm text-black/60 select-none">
+                              <For each={item.contents}>
+                                {(contentItem) => (
+                                  <div class="flex w-fit flex-row rounded-xs bg-zinc-300/60 shadow-2xl">
+                                    <div class="flex items-center rounded-l-xs bg-slate-600/60 px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none">
+                                      {t[
+                                        contentItem.type as TranslationKey
+                                      ]._model.verboseName()}
                                     </div>
-                                  )}
-                                </For>
-                              </div>
+
+                                    <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs text-black/60 select-none">
+                                      {contentItem.label || <i>...</i>}
+                                    </div>
+                                  </div>
+                                )}
+                              </For>
                             </div>
                           </div>
                           <button
