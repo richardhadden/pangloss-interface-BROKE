@@ -11,14 +11,15 @@ import { unwrap } from "solid-js/store";
 import { useClipboard, useStorage } from "solidjs-use";
 import { IoClipboard, IoCloseSharp } from "solid-icons/io";
 import { TranslationKey, useTranslation } from "~/contexts/translation";
-import { isServer } from "solid-js/web";
-import { BiRegularReset } from "solid-icons/bi";
+import { isServer, render } from "solid-js/web";
+import { BiRegularPaste, BiRegularReset } from "solid-icons/bi";
 import colors from "tailwindcss/colors";
 import {
   BaseNodeDefinitionMap,
   ModelDefinitions,
   ReifiedRelationsDefinitionMap,
   SemanticSpaceDefinitionMap,
+  TRelationFieldDefinition,
 } from "../../../.model-configs/model-definitions";
 import { deepEqual } from "~/utils/deepEquals";
 
@@ -71,12 +72,140 @@ function _remove(index: number) {
   localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(update));
 }
 
+function _getPasteableItemsFromScratchboard(
+  fieldDefinitionTypes: TRelationFieldDefinition["types"],
+) {
+  const allowedPasteBaseNodeTypes = fieldDefinitionTypes
+    .filter((t) => t.metatype === "RelationToNode")
+    .map((t) => t.type);
+
+  const allowedPasteSemanticSpaceTypeDefinitions = fieldDefinitionTypes.filter(
+    (t) => t.metatype === "RelationToSemanticSpace",
+  );
+  const allowedSemanticSpaceTypes =
+    allowedPasteSemanticSpaceTypeDefinitions.map((t) => t.baseType);
+
+  return _scratchboard().filter((scratchboardItem) => {
+    if (allowedPasteBaseNodeTypes.includes(scratchboardItem.type)) {
+      return true;
+    } else if (allowedSemanticSpaceTypes.includes(scratchboardItem.type)) {
+      const semanticSpaceTypeDefinition =
+        allowedPasteSemanticSpaceTypeDefinitions.filter(
+          (t) => t.baseType === scratchboardItem.type,
+        )[0];
+
+      const allowedSemanticSpaceNestedTypes =
+        semanticSpaceTypeDefinition.types.flatMap((types) =>
+          types.typeParamsToTypeMap[
+            Object.keys(types.typeParamsToTypeMap)[0]
+          ].types
+            .filter((t) => t.metatype === "RelationToNode")
+            .map((t) => t.type),
+        );
+
+      if (
+        scratchboardItem.contents.every((contentItem) =>
+          allowedSemanticSpaceNestedTypes.includes(contentItem.type),
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+type TRenderPasteableInlineProps = {
+  fieldDefinitionTypes: TRelationFieldDefinition["types"];
+  onPasteItem: (item: object) => void;
+};
+
+export function RenderPasteableInline(props: TRenderPasteableInlineProps) {
+  const [lang, { t }] = useTranslation();
+  return (
+    <Show when={scratchboard.itemsFor(props.fieldDefinitionTypes).length > 0}>
+      <div class="col-span-12">
+        <For each={scratchboard.itemsFor(props.fieldDefinitionTypes)}>
+          {(scratchboardItem) => (
+            <Switch>
+              <Match when={scratchboardItem.type in SemanticSpaceDefinitionMap}>
+                <div class="flex w-fit overflow-clip rounded-xs not-last:mb-2 first:mt-4">
+                  <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                    <div
+                      class={
+                        "flex items-center px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none " +
+                        getColour(scratchboardItem.type).paste
+                      }
+                    >
+                      {t[
+                        scratchboardItem.type as TranslationKey
+                      ]._model.verboseName()}
+                    </div>
+
+                    <div class="flex w-fit flex-nowrap items-center pr-1 pl-1 text-sm text-black/60 select-none">
+                      <For each={scratchboardItem.contents}>
+                        {(contentItem) => (
+                          <div class="flex w-fit flex-row rounded-xs bg-zinc-300/60 shadow-2xl">
+                            <div class="flex items-center rounded-l-xs bg-slate-600/60 px-3 py-2 text-[10px] font-semibold text-nowrap text-slate-100 uppercase select-none">
+                              {t[
+                                contentItem.type as TranslationKey
+                              ]._model.verboseName()}
+                            </div>
+
+                            <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-xs text-black/60 select-none">
+                              {contentItem.label || <i>...</i>}
+                            </div>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                  <button
+                    onclick={() => props.onPasteItem(scratchboardItem)}
+                    class="group flex aspect-square h-10 cursor-pointer items-center justify-center rounded-r-xs bg-green-500/80 hover:bg-green-500/90 active:bg-green-500/80 active:shadow-inner active:shadow-slate-600/30"
+                  >
+                    <BiRegularPaste color="white" size={14} />
+                  </button>
+                </div>
+              </Match>
+              <Match when={scratchboardItem.type in BaseNodeDefinitionMap}>
+                <div class="flex overflow-clip rounded-xs not-last:mb-2">
+                  <div class="flex">
+                    <div class="flex w-fit flex-row bg-zinc-400/60 shadow-2xl">
+                      <div class="flex items-center bg-slate-600/60 px-3 py-2 text-xs font-semibold text-nowrap text-slate-100 uppercase select-none">
+                        {t[
+                          scratchboardItem.type as TranslationKey
+                        ]._model.verboseName()}
+                      </div>
+
+                      <div class="flex w-fit flex-nowrap items-center pr-4 pl-4 text-sm text-black/60 select-none">
+                        {scratchboardItem.label || <i>...</i>}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onclick={() => props.onPasteItem(scratchboardItem)}
+                    class="group flex aspect-square h-10 cursor-pointer items-center justify-center rounded-r-xs bg-green-500/80 hover:bg-green-500/90 active:bg-green-500/80 active:shadow-inner active:shadow-slate-600/30"
+                  >
+                    <BiRegularPaste color="white" size={14} />
+                  </button>
+                </div>
+              </Match>
+            </Switch>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
 export const scratchboard = {
   items: _scratchboard,
   copy: _copy,
   cut: _cut,
   reset: _reset,
   remove: _remove,
+  itemsFor: _getPasteableItemsFromScratchboard,
 };
 
 function generateLabelForReifiedRelation(item) {

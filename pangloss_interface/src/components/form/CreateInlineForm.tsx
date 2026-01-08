@@ -51,7 +51,7 @@ function CreateInlineForm(props: TCreateInlineFormProps) {
   return (
     <div
       class="fixed top-0 right-0 left-12 z-20 flex h-dvh items-center justify-center bg-slate-500/50 px-20"
-      onClick={handleBackgroundClick}
+      // onClick={handleBackgroundClick} Removed as closes on selection menu click
     >
       <div
         class="min-w-1/2 rounded-xs bg-slate-300/50 shadow-2xl shadow-slate-900/70 backdrop-blur-2xl"
